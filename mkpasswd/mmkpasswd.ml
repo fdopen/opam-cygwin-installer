@@ -4,7 +4,7 @@ let error_exit msg =
 
 let get_passwd_lines () =
   let buf = Buffer.create 1024 in
-  let ec = Run.run ~stdout:(`Buffer buf) "mkpasswd.exe" [] in
+  let ec = Run.run ~stdout:(`Buffer buf) "mkpasswd.exe" ["-c"] in
   if ec <> 0 then
     error_exit "call to mkpasswd.exe failed";
   match CCString.Split.list_cpy ~by:"\n" (Buffer.contents buf) with

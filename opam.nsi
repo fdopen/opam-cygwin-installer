@@ -328,7 +328,7 @@ Section "Opam" InstallOpam
   SetDetailsPrint both
   DetailPrint "Creating a customized passwd file ..."
   SetDetailsPrint listonly
-  nsExec::ExecToLog '"$INSTDIR\bin\dash.exe" -l /tmp/OCaml${FDOPENBITS}/mkpasswd/mmkpasswd.sh'
+  nsExec::ExecToLog '"$INSTDIR\bin\bash.exe" --login /tmp/OCaml${FDOPENBITS}/mkpasswd/mmkpasswd.sh'
   Pop $R1
   ${If} $R1 != "0"
     goto error
