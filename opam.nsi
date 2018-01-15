@@ -4,6 +4,7 @@
 !include "nsDialogs.nsh"
 !include "winmessages.nsh"
 !include "FileFunc.nsh"
+!include "x64.nsh"
 
 Unicode true
 
@@ -11,11 +12,8 @@ Unicode true
 !addincludedir StdUtils/Include
 !include "StdUtils.nsh"
 
-!if "${FDOPENBITS}" == "64"
-!define CYGWIN_URL "https://cygwin.com/setup-x86_64.exe"
-!else
-!define CYGWIN_URL "https://cygwin.com/setup-x86.exe"
-!endif
+!define CYGWIN_URL64 "https://cygwin.com/setup-x86_64.exe"
+!define CYGWIN_URL32 "https://cygwin.com/setup-x86.exe"
 !define CYGWIN_URL_MIRRORS "https://cygwin.com/mirrors.lst"
 !define CYGWIN_MIRROR "http://cygwin.mirror.constant.com"
 
@@ -219,7 +217,16 @@ Section "Cygwin" InstallCygwin
   Delete $0
   CreateDirectory $0
   StrCpy $MYTEMPDIR $0
-  NSISdl::download /TIMEOUT=30000 ${CYGWIN_URL} "$MYTEMPDIR\cygwin-dl.exe"
+!if "${FDOPENBITS}" == "64"
+  NSISdl::download /TIMEOUT=30000 ${CYGWIN_URL64} "$MYTEMPDIR\cygwin-dl.exe"
+!else
+  ${If} ${RunningX64}
+    StrCpy $0 ${CYGWIN_URL64}
+  ${Else}
+    StrCpy $0 ${CYGWIN_URL32}
+  ${EndIf}
+  NSISdl::download /TIMEOUT=30000 $0 "$MYTEMPDIR\cygwin-dl.exe"
+!endif
   Pop $0
   StrCmp $0 "success" ok
     MessageBox MB_OK "Couldn't download cygwin's setup.exe: $0"
@@ -243,6 +250,13 @@ Section "Cygwin" InstallCygwin
   NSISdl::download /TIMEOUT=30000 "${CYGWIN_MIRROR}/x86_64/sha512.sum" "$MYTEMPDIR\sha512.sum"
   Pop $0
   StrCmp $0 "success" 0 manualinstall
+
+  ; fix me: how to hide cygwin window?
+  ; or don't hide it all?
+  ; once decided, remove code duplication!
+  SetDetailsPrint both
+  DetailPrint "Cygwin is being installed..."
+  SetDetailsPrint listonly
 
   ${If} "$AdminType" == "admin"
     ExecWait "$MYTEMPDIR\cygwin-dl.exe --quiet-mode --root $INSTDIR \
@@ -280,7 +294,6 @@ Section "Cygwin" InstallCygwin
 	>NUL 2>&1" $0
     IfErrors 0 no_error
   ${Endif}
-  Goto failinstall
 
   failinstall:
   RMDir /r $MYTEMPDIR
