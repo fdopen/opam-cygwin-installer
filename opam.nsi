@@ -1,5 +1,6 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "textfunc.nsh"
 !include "nsDialogs.nsh"
 !include "winmessages.nsh"
 !include "FileFunc.nsh"
@@ -15,6 +16,8 @@ Unicode true
 !else
 !define CYGWIN_URL "https://cygwin.com/setup-x86.exe"
 !endif
+!define CYGWIN_URL_MIRRORS "https://cygwin.com/mirrors.lst"
+!define CYGWIN_MIRROR "http://cygwin.mirror.constant.com"
 
 !define CYGWIN_PACKAGES_COMMON "bc,dash,diffutils,dos2unix,file,findutils,gawk,make,mintty,ncurses,patch,rlwrap,sed,tar,unzip,wget,which,xz,zsh,rsync,git,perl,m4,curl,wget,time"
 !if "${FDOPENBITS}" == "64"
@@ -77,6 +80,8 @@ BrandingText " "
 Var CygwinCreated
 Var AdminType
 Var AdminAndUac
+Var CygwinMirrorFound
+Var CygwinMirrorLength
 
 Function CheckForSpaces
  Exch $R0
@@ -184,6 +189,16 @@ Function CheckDirectory
   end:
 FunctionEnd
 
+Function GrepMirror
+  StrCpy $0 $R9 $CygwinMirrorLength
+  ${if} $0 == "${CYGWIN_MIRROR}"
+    StrCpy $CygwinMirrorFound 1
+    Push "StopLineFind"
+  ${else}
+    Push 0
+  ${endIf}
+FunctionEnd
+
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "license.txt"
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE "CheckDirectory"
@@ -213,6 +228,40 @@ Section "Cygwin" InstallCygwin
   ok:
   ClearErrors
 
+  NSISdl::download /TIMEOUT=30000 ${CYGWIN_URL_MIRRORS} "$MYTEMPDIR\mirrors.lst"
+  Pop $0
+  StrCmp $0 "success" 0 manualinstall
+
+  StrCpy $CygwinMirrorFound 0
+  StrLen $CygwinMirrorLength "${CYGWIN_MIRROR}"
+  ${LineFind} "$MYTEMPDIR\mirrors.lst" "/NUL" "1:-1" "GrepMirror"
+  ${if} $CygwinMirrorFound = 0
+    goto manualinstall
+  ${endIf}
+
+  ; just in order to test, if the mirror is online
+  NSISdl::download /TIMEOUT=30000 "${CYGWIN_MIRROR}/x86_64/sha512.sum" "$MYTEMPDIR\sha512.sum"
+  Pop $0
+  StrCmp $0 "success" 0 manualinstall
+
+  ${If} "$AdminType" == "admin"
+    ExecWait "$MYTEMPDIR\cygwin-dl.exe --quiet-mode --root $INSTDIR \
+        --local-package-dir=$TEMP\cygwin\ \
+        --site=${CYGWIN_MIRROR}/ \
+        -g --wait --packages=${CYGWIN_PACKAGES} \
+        >NUL 2>&1" $0
+    IfErrors 0 no_error
+  ${Else}
+    ExecWait "$MYTEMPDIR\cygwin-dl.exe --quiet-mode --root $INSTDIR \
+        --no-admin --local-package-dir=$TEMP\cygwin\ \
+        --site=${CYGWIN_MIRROR}/ \
+        -g --wait --packages=${CYGWIN_PACKAGES} \
+	>NUL 2>&1" $0
+    IfErrors 0 no_error
+  ${Endif}
+  Goto failinstall
+
+  manualinstall:
   SetDetailsPrint both
   DetailPrint "Cygwin is being installed. Just follow the instructions!"
   SetDetailsPrint listonly
@@ -231,7 +280,9 @@ Section "Cygwin" InstallCygwin
 	>NUL 2>&1" $0
     IfErrors 0 no_error
   ${Endif}
+  Goto failinstall
 
+  failinstall:
   RMDir /r $MYTEMPDIR
   DetailPrint "Cygwin installation failed"  
   MessageBox MB_OK "The installation of cygwin failed. OCaml/opam can't be installed. $\n\
